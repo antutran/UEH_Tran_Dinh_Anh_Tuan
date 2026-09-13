@@ -1,0 +1,110 @@
+# =============================================================================
+# UEH CRC 2026 – Solution parameters
+# All perception and control thresholds live here.
+# The behavior_node loads this file at startup via ROS parameters.
+# Change base_speed live during the video demo:
+#   ros2 param set /behavior_node base_speed 0.22
+# =============================================================================
+
+behavior_node:
+  ros__parameters:
+    use_sim_time: true
+
+    # --- Speed ------------------------------------------------------------------
+    # PRIMARY DEMO PARAMETER: easy to observe, safe to change live.
+    base_speed:     0.18     # m/s – normal cruise speed
+    max_speed:      0.22     # m/s – absolute cap
+    min_speed:      0.06     # m/s – minimum while correcting large errors
+    stop_speed:     0.00     # m/s – when stopped
+
+    # --- Steering PD controller ------------------------------------------------
+    kp_steer:       0.0042   # proportional gain (pixels → rad/s)
+    kd_steer:       0.0008   # derivative gain
+    max_angular_velocity: 2.0  # rad/s hard cap
+
+    # --- Speed modulation on large error ---------------------------------------
+    steer_slowdown_threshold: 60   # px: reduce speed above this error
+    steer_slowdown_factor:    0.55  # multiply base_speed by this factor
+
+    # --- LiDAR safety ----------------------------------------------------------
+    emergency_stop_dist:  0.25   # m: EMERGENCY_STOP trigger
+    slow_down_dist:       0.55   # m: start reducing speed
+    slow_down_factor:     0.50   # multiply base_speed
+    front_arc_deg:        25.0   # ±degrees around 0° for front obstacle
+
+    # --- Lane perception -------------------------------------------------------
+    roi_top_frac:     0.55   # fraction from top where ROI starts (0=top,1=bottom)
+    clahe_clip:       2.5    # CLAHE clip limit (normal scene)
+    clahe_clip_dark:  4.5    # CLAHE clip limit (tunnel / dark scene)
+    dark_threshold:   40     # mean ROI brightness below which → dark mode
+    adaptive_block:   31     # adaptive threshold block size (must be odd)
+    adaptive_c:       -10    # adaptive threshold constant (negative → include brighter)
+    min_white_pixels: 80     # minimum white px to trust a side centroid
+
+    # --- STOP sign -------------------------------------------------------------
+    stop_hold_seconds:   2.2   # seconds to hold complete stop
+    stop_cooldown_secs:  5.0   # seconds to ignore STOP sign after resuming
+    stop_brake_dist:     0.45  # m: LiDAR distance at which to stop (sign approach)
+    stop_min_area:       350   # minimum red contour area in pixels²
+
+    # --- Traffic light ---------------------------------------------------------
+    light_min_radius:    6     # px
+    light_max_radius:    30    # px
+    light_confirm_frames: 5    # frames before committing to new state
+    light_roi_bottom_frac: 0.50 # only look in top half for traffic light
+
+    # --- Pedestrian ------------------------------------------------------------
+    ped_lidar_sector_lo:  60   # degrees: lateral detection window (left of robot)
+    ped_lidar_sector_hi: 110
+    ped_lidar_max_dist:  1.20  # m: pedestrian detection range
+    ped_camera_min_area:  80   # minimum purple/indigo blob area in pixels²
+    ped_stop_hysteresis: 0.40  # m: resume when object clears by this extra margin
+
+    # --- Overtaking (disabled until Phase 2) -----------------------------------
+    overtaking_enabled:   false
+    overtake_confirm_secs: 3.0
+    overtake_lateral_w:   0.65  # rad/s to change lanes
+    overtake_pass_time:   4.0   # seconds in passing lane
+    overtake_return_w:   -0.55  # rad/s to return
+
+    # --- Data logger -----------------------------------------------------------
+    log_enabled:    true
+    log_dir:        '/tmp/crc_logs'
+    log_rate_hz:    10.0
+
+lane_node:
+  ros__parameters:
+    use_sim_time: true
+    # These override the behavior_node copies so lane_node can run standalone.
+    roi_top_frac:  0.55
+    clahe_clip:    2.5
+    adaptive_block: 31
+    adaptive_c:    -10
+    min_white_pixels: 80
+
+lidar_node:
+  ros__parameters:
+    use_sim_time: true
+    emergency_stop_dist: 0.25
+    slow_down_dist:      0.55
+    front_arc_deg:       25.0
+
+sign_node:
+  ros__parameters:
+    use_sim_time: true
+    stop_min_area:  350
+
+light_node:
+  ros__parameters:
+    use_sim_time: true
+    light_min_radius:     6
+    light_max_radius:     30
+    light_confirm_frames: 5
+    light_roi_bottom_frac: 0.50
+
+ped_node:
+  ros__parameters:
+    use_sim_time: true
+    ped_lidar_sector_lo: 60
+    ped_lidar_sector_hi: 110
+    ped_lidar_max_dist:  1.20

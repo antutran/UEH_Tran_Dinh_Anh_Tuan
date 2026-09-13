@@ -1,0 +1,62 @@
+# =============================================================================
+# UEH CRC 2026 – .gitignore
+# =============================================================================
+
+# ---- ROS 2 / colcon build outputs -------------------------------------------
+build/
+install/
+log/
+
+# ---- Python cache -----------------------------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+.eggs/
+
+# ---- IDEs -------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS junk ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- ROS bag files and databases (can be large) ----------------------------
+*.bag
+*.db3
+*.bag.active
+
+# ---- Temporary Gazebo files -------------------------------------------------
+/tmp/
+*.world.bak
+
+# ---- Docker build artifacts (keep Dockerfile and docker-compose.yml) --------
+# (nothing to ignore here — the docker/ dir only has config files)
+
+# ---- Logs and data files (large runtime outputs) ----------------------------
+# NOTE: /tmp/crc_logs/ is outside the repo, so nothing to ignore there.
+# Do NOT ignore analysis/*.py — those are source files.
+
+# ---- Large media files (if any) ---------------------------------------------
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# NOTE: .pdf files (like the guideline) ARE committed — they are part of the
+# official competition pack and are small enough (<500 KB).
+
+# ---- Never ignore these (explicit safety) -----------------------------------
+# src/ueh_solution/**   <- contestant code
+# analysis/**           <- analysis scripts
+# README.md
+# AI_USAGE.md
+# VIDEO_SCRIPT.md
+# docs/**               <- reference images
