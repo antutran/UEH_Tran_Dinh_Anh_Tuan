@@ -96,8 +96,9 @@ class BehaviorNode(Node):
         self.declare_parameter('overtake_confirm_secs',     3.0)
         self.declare_parameter('overtake_lateral_w',        0.65)
         self.declare_parameter('overtake_pass_time',        4.0)
-        self.declare_parameter('overtake_return_w',        -0.55)
-        self.declare_parameter('rate',                      20.0)
+        self.declare_parameter('enable_pedestrian',        True)
+        self.declare_parameter('test_mode',                '')
+        self.declare_parameter('rate',                     20.0)
 
         # Read all params
         def p(name):
@@ -122,6 +123,8 @@ class BehaviorNode(Node):
         self.overtake_lat_w    = float(p('overtake_lateral_w'))
         self.overtake_pass_t   = float(p('overtake_pass_time'))
         self.overtake_ret_w    = float(p('overtake_return_w'))
+        self.enable_pedestrian = bool(p('enable_pedestrian'))
+        self.test_mode         = str(p('test_mode')).strip()
 
         # ---- Sensor / Perception state variables ----------------------------
         self.lane_error      = 0.0
@@ -171,8 +174,8 @@ class BehaviorNode(Node):
         rate = float(p('rate'))
         self.create_timer(1.0 / rate, self._tick)
         self.get_logger().info(
-            f'behavior_node ready | state={self.state} | '
-            f'base_speed={self.base_speed:.2f} m/s')
+            f'behavior_node ready | state={self.state} | mode={self.test_mode or "normal"} | '
+            f'ped_enabled={self.enable_pedestrian} | base_speed={self.base_speed:.2f} m/s')
 
     # ======================================================================== #
     # MAIN CONTROL LOOP
@@ -203,9 +206,23 @@ class BehaviorNode(Node):
             self._transition(ST_LANE)
 
         # -------------------------------------------------------------------- #
+        # GLOBAL TEST MODE: lane_only
+        # In lane_only mode:
+        # - lane perception enabled
+        # - lane controller enabled
+        # - simple LiDAR emergency safety remains enabled (Priority 0 above)
+        # - pedestrian behavior disabled
+        # - sign behavior disabled
+        # - traffic-light behavior disabled
+        # -------------------------------------------------------------------- #
+        if self.test_mode == 'lane_only':
+            self._lane_following_step()
+            return
+
+        # -------------------------------------------------------------------- #
         # PRIORITY 1 – PEDESTRIAN STOP
         # -------------------------------------------------------------------- #
-        if self.ped_blocking:
+        if self.enable_pedestrian and self.ped_blocking:
             if self.state != ST_PEDESTRIAN:
                 self._transition(ST_PEDESTRIAN)
                 self.get_logger().info('PEDESTRIAN: stopping')
@@ -240,6 +257,10 @@ class BehaviorNode(Node):
         # -------------------------------------------------------------------- #
         # PRIORITY 7 – LANE FOLLOWING (with optional overtaking)
         # -------------------------------------------------------------------- #
+        self._lane_following_step()
+
+    def _lane_following_step(self):
+        """Lane following step with PD steering and speed modulation."""
         if self.state not in (ST_LANE,):
             self._transition(ST_LANE)
 

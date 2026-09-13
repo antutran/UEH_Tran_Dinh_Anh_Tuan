@@ -10,6 +10,10 @@ behavior_node:
   ros__parameters:
     use_sim_time: true
 
+    # --- Mode & Feature Toggles -------------------------------------------------
+    test_mode:          ""       # "" for normal competition, "lane_only" for lane + emergency LiDAR only
+    enable_pedestrian:  true     # when false, pedestrian detection does not stop robot
+
     # --- Speed ------------------------------------------------------------------
     # PRIMARY DEMO PARAMETER: easy to observe, safe to change live.
     base_speed:     0.18     # m/s – normal cruise speed
@@ -105,6 +109,11 @@ light_node:
 ped_node:
   ros__parameters:
     use_sim_time: true
-    ped_lidar_sector_lo: 60
-    ped_lidar_sector_hi: 110
-    ped_lidar_max_dist:  1.20
+    enable_pedestrian:    true
+    ped_lidar_sector_lo:  60.0
+    ped_lidar_sector_hi: 110.0
+    ped_lidar_max_dist:   1.20
+    ped_lidar_min_points: 2
+    ped_camera_min_area:  100
+    ped_cam_confirm_min:  3
+    ped_cam_history_len:  5
