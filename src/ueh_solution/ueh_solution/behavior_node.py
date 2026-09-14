@@ -96,6 +96,7 @@ class BehaviorNode(Node):
         self.declare_parameter('overtake_confirm_secs',     3.0)
         self.declare_parameter('overtake_lateral_w',        0.65)
         self.declare_parameter('overtake_pass_time',        4.0)
+        self.declare_parameter('overtake_return_w',        -0.55)
         self.declare_parameter('enable_pedestrian',        True)
         self.declare_parameter('test_mode',                '')
         self.declare_parameter('rate',                     20.0)
