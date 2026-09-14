@@ -11,9 +11,10 @@ behavior_node:
     use_sim_time: true
 
     # --- Mode & Feature Toggles -------------------------------------------------
-    test_mode:          ""       # "" for normal competition, "lane_only" for lane + emergency LiDAR only
-    enable_pedestrian:  true     # when false, pedestrian detection does not stop robot
-    rate:               20.0     # Hz: FSM control loop rate
+    test_mode:           ""      # "" for normal competition, "lane_only", or "lane_camera_only"
+    enable_pedestrian:   true    # when false, pedestrian detection does not stop robot
+    enable_lidar_safety: true    # when false, LiDAR emergency stop & slow-down are disabled
+    rate:                20.0    # Hz: FSM control loop rate
 
     # --- Speed ------------------------------------------------------------------
     # PRIMARY DEMO PARAMETER: easy to observe, safe to change live.

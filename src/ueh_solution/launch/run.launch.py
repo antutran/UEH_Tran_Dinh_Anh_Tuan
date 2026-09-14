@@ -40,10 +40,12 @@ def generate_launch_description():
     log_dir_arg           = DeclareLaunchArgument('log_dir',           default_value='/tmp/crc_logs')
     log_enabled_arg       = DeclareLaunchArgument('log_enabled',       default_value='true')
     debug_arg             = DeclareLaunchArgument('publish_debug',     default_value='false')
-    test_mode_arg         = DeclareLaunchArgument('test_mode',         default_value='',
-                                                  description='Test mode: "" (normal competition) or "lane_only"')
-    enable_pedestrian_arg = DeclareLaunchArgument('enable_pedestrian', default_value='true',
-                                                  description='Enable pedestrian detection (true/false)')
+    test_mode_arg           = DeclareLaunchArgument('test_mode',           default_value='',
+                                                    description='Test mode: "" (normal), "lane_only", or "lane_camera_only"')
+    enable_pedestrian_arg   = DeclareLaunchArgument('enable_pedestrian',   default_value='true',
+                                                    description='Enable pedestrian detection (true/false)')
+    enable_lidar_safety_arg = DeclareLaunchArgument('enable_lidar_safety', default_value='true',
+                                                    description='Enable LiDAR emergency stop & slow-down (true/false)')
 
     common_params = [
         params_file,
@@ -104,8 +106,9 @@ def generate_launch_description():
         name='behavior_node',
         output='screen',
         parameters=common_params + [
-            {'test_mode':         LaunchConfiguration('test_mode')},
-            {'enable_pedestrian': LaunchConfiguration('enable_pedestrian')},
+            {'test_mode':           LaunchConfiguration('test_mode')},
+            {'enable_pedestrian':   LaunchConfiguration('enable_pedestrian')},
+            {'enable_lidar_safety': LaunchConfiguration('enable_lidar_safety')},
         ],
     )
 
@@ -126,6 +129,7 @@ def generate_launch_description():
         debug_arg,
         test_mode_arg,
         enable_pedestrian_arg,
+        enable_lidar_safety_arg,
         lane_node,
         lidar_node,
         sign_node,

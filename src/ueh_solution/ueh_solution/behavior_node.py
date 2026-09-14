@@ -98,6 +98,7 @@ class BehaviorNode(Node):
         self.declare_parameter('overtake_pass_time',        4.0)
         self.declare_parameter('overtake_return_w',        -0.55)
         self.declare_parameter('enable_pedestrian',        True)
+        self.declare_parameter('enable_lidar_safety',      True)
         self.declare_parameter('test_mode',                '')
         self.declare_parameter('rate',                     20.0)
 
@@ -105,27 +106,33 @@ class BehaviorNode(Node):
         def p(name):
             return self.get_parameter(name).value
 
-        self.base_speed        = float(p('base_speed'))
-        self.max_speed         = float(p('max_speed'))
-        self.min_speed         = float(p('min_speed'))
-        self.kp                = float(p('kp_steer'))
-        self.kd                = float(p('kd_steer'))
-        self.max_w             = float(p('max_angular_velocity'))
-        self.slow_thr          = float(p('steer_slowdown_threshold'))
-        self.slow_factor       = float(p('steer_slowdown_factor'))
-        self.estop_dist        = float(p('emergency_stop_dist'))
-        self.slow_dist         = float(p('slow_down_dist'))
-        self.slow_speed_factor = float(p('slow_down_factor'))
-        self.stop_hold_s       = float(p('stop_hold_seconds'))
-        self.stop_cooldown_s   = float(p('stop_cooldown_secs'))
-        self.stop_brake_dist   = float(p('stop_brake_dist'))
-        self.overtaking_on     = bool(p('overtaking_enabled'))
-        self.overtake_conf_s   = float(p('overtake_confirm_secs'))
-        self.overtake_lat_w    = float(p('overtake_lateral_w'))
-        self.overtake_pass_t   = float(p('overtake_pass_time'))
-        self.overtake_ret_w    = float(p('overtake_return_w'))
-        self.enable_pedestrian = bool(p('enable_pedestrian'))
-        self.test_mode         = str(p('test_mode')).strip()
+        self.base_speed          = float(p('base_speed'))
+        self.max_speed           = float(p('max_speed'))
+        self.min_speed           = float(p('min_speed'))
+        self.kp                  = float(p('kp_steer'))
+        self.kd                  = float(p('kd_steer'))
+        self.max_w               = float(p('max_angular_velocity'))
+        self.slow_thr            = float(p('steer_slowdown_threshold'))
+        self.slow_factor         = float(p('steer_slowdown_factor'))
+        self.estop_dist          = float(p('emergency_stop_dist'))
+        self.slow_dist           = float(p('slow_down_dist'))
+        self.slow_speed_factor   = float(p('slow_down_factor'))
+        self.stop_hold_s         = float(p('stop_hold_seconds'))
+        self.stop_cooldown_s     = float(p('stop_cooldown_secs'))
+        self.stop_brake_dist     = float(p('stop_brake_dist'))
+        self.overtaking_on       = bool(p('overtaking_enabled'))
+        self.overtake_conf_s     = float(p('overtake_confirm_secs'))
+        self.overtake_lat_w      = float(p('overtake_lateral_w'))
+        self.overtake_pass_t     = float(p('overtake_pass_time'))
+        self.overtake_ret_w      = float(p('overtake_return_w'))
+        self.enable_pedestrian   = bool(p('enable_pedestrian'))
+        self.enable_lidar_safety = bool(p('enable_lidar_safety'))
+        self.test_mode           = str(p('test_mode')).strip()
+
+        # Diagnostic logging state (low-frequency ~2 Hz)
+        self.last_cmd_v      = 0.0
+        self.last_cmd_w      = 0.0
+        self._last_diag_time = 0.0
 
         # ---- Sensor / Perception state variables ----------------------------
         self.lane_error      = 0.0
@@ -188,23 +195,50 @@ class BehaviorNode(Node):
             self.get_logger().error(f'behavior _tick raised: {e}')
             self._publish(0.0, 0.0)
 
+        # Diagnostic logging at ~2 Hz (every 0.5s)
+        now = time.time()
+        if now - self._last_diag_time >= 0.5:
+            self._last_diag_time = now
+            mode_str = self.test_mode if self.test_mode else 'normal'
+            self.get_logger().info(
+                f'[DIAG 2Hz] lane_error={self.lane_error:+.2f} | '
+                f'linear_x={self.last_cmd_v:.2f} | angular_z={self.last_cmd_w:+.3f} | '
+                f'state={self.state} | test_mode={mode_str}')
+
     def _fsm_step(self):
         now = time.time()
         dt  = now - self.state_t0
 
+        lidar_safety_active = self.enable_lidar_safety and (self.test_mode != 'lane_camera_only')
+
         # -------------------------------------------------------------------- #
         # PRIORITY 0 – EMERGENCY STOP (LiDAR imminent collision)
         # -------------------------------------------------------------------- #
-        if self.front_dist <= self.estop_dist:
+        if lidar_safety_active and self.front_dist <= self.estop_dist:
             if self.state != ST_EMERGENCY:
                 self._transition(ST_EMERGENCY)
             self._publish(0.0, 0.0)
             self._log_rate(2.0, f'EMERGENCY_STOP front={self.front_dist:.2f}m')
             return
 
-        # If we were in EMERGENCY and obstacle cleared, resume
-        if self.state == ST_EMERGENCY:
+        # If we were in EMERGENCY and obstacle cleared (or safety disabled), resume
+        if self.state == ST_EMERGENCY and (not lidar_safety_active or self.front_dist > self.estop_dist):
             self._transition(ST_LANE)
+
+        # -------------------------------------------------------------------- #
+        # TEST MODE: lane_camera_only
+        # In lane_camera_only mode:
+        # - use lane perception
+        # - use lane steering controller
+        # - publish cmd_vel normally
+        # - disable pedestrian behavior
+        # - disable traffic-light behavior
+        # - disable sign behavior
+        # - disable LiDAR emergency stop and LiDAR slow-down
+        # -------------------------------------------------------------------- #
+        if self.test_mode == 'lane_camera_only':
+            self._lane_following_step(ignore_lidar=True)
+            return
 
         # -------------------------------------------------------------------- #
         # GLOBAL TEST MODE: lane_only
@@ -217,7 +251,7 @@ class BehaviorNode(Node):
         # - traffic-light behavior disabled
         # -------------------------------------------------------------------- #
         if self.test_mode == 'lane_only':
-            self._lane_following_step()
+            self._lane_following_step(ignore_lidar=(not self.enable_lidar_safety))
             return
 
         # -------------------------------------------------------------------- #
@@ -258,16 +292,16 @@ class BehaviorNode(Node):
         # -------------------------------------------------------------------- #
         # PRIORITY 7 – LANE FOLLOWING (with optional overtaking)
         # -------------------------------------------------------------------- #
-        self._lane_following_step()
+        self._lane_following_step(ignore_lidar=(not self.enable_lidar_safety))
 
-    def _lane_following_step(self):
+    def _lane_following_step(self, ignore_lidar=False):
         """Lane following step with PD steering and speed modulation."""
         if self.state not in (ST_LANE,):
             self._transition(ST_LANE)
 
         # --- Speed based on LiDAR distance ---
         speed = self.base_speed
-        if self.lidar_status == 1:   # slow zone
+        if not ignore_lidar and self.enable_lidar_safety and self.lidar_status == 1:   # slow zone
             speed *= self.slow_speed_factor
 
         # --- Speed reduction on large steering error ---
@@ -361,9 +395,13 @@ class BehaviorNode(Node):
 
     # ---------------------------------------------------------------------- #
     def _publish(self, v, w):
+        cmd_v = float(max(-self.max_speed, min(self.max_speed, v)))
+        cmd_w = float(max(-self.max_w,     min(self.max_w,     w)))
+        self.last_cmd_v = cmd_v
+        self.last_cmd_w = cmd_w
         msg = Twist()
-        msg.linear.x  = float(max(-self.max_speed, min(self.max_speed, v)))
-        msg.angular.z = float(max(-self.max_w,     min(self.max_w,     w)))
+        msg.linear.x  = cmd_v
+        msg.angular.z = cmd_w
         self.pub_cmd.publish(msg)
 
     # ---------------------------------------------------------------------- #
