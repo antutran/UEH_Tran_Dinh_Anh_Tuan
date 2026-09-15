@@ -137,25 +137,48 @@ class LaneNode(Node):
         left_mask  = mask[:, :mid]
         right_mask = mask[:, mid:]
 
-        left_cx  = self._centroid_x(left_mask)   # None if not enough pixels
-        right_cx = self._centroid_x(right_mask)  # relative to right half
+        left_line  = self._centroid_x(left_mask)
+        right_line = self._centroid_x(right_mask)
+        left_cx = None if left_line is None else left_line[0]
+        right_cx = None if right_line is None else right_line[0]
+
+        # A thin horizon/roof edge is consistently confined to the first few
+        # rows of the right half.  Do not accept it as a lane boundary when a
+        # materially deeper left marking is available.  Keep the resulting
+        # far-field correction gentle until a nearby boundary is acquired.
+        if (left_line is not None and right_line is not None and
+                left_line[1] > 0.13 and right_line[1] < 0.06):
+            right_cx = None
+        elif (left_line is None and right_line is not None and
+              right_line[1] < 0.06):
+            right_cx = None
 
         # ---- Lane centre estimate -------------------------------------------
         if left_cx is not None and right_cx is not None:
             # Both sides visible: midpoint
             lane_cx = (left_cx + (mid + right_cx)) / 2.0
+            single_line = False
         elif left_cx is not None:
-            # Only left marking: assume lane width ~half image width
-            lane_cx = left_cx + mid * 0.5
+            # Apparent lane width grows toward the camera.  This prevents a
+            # nearby edge marking from causing the same correction as a
+            # distant curve preview.
+            half_lane = mid * min(1.0, 0.50 + 0.90 * left_line[1])
+            lane_cx = left_cx + half_lane
+            single_line = True
         elif right_cx is not None:
-            # Only right marking
-            lane_cx = (mid + right_cx) - mid * 0.5
+            half_lane = mid * min(1.0, 0.50 + 0.90 * right_line[1])
+            lane_cx = (mid + right_cx) - half_lane
+            single_line = True
         else:
-            # No markings detected — hold previous error (temporal filter)
+            # No markings detected: preserve steering direction briefly, but
+            # do not lock a large correction through an unmarked section.
+            self.prev_error *= 0.85
             return self.prev_error, dark_mode
 
         image_cx = w / 2.0
         error    = image_cx - lane_cx   # +ve → lane centre is left → turn left
+        if single_line:
+            error = float(np.clip(error, -60.0, 60.0))
 
         # Temporal smoothing: blend with previous
         error = 0.75 * error + 0.25 * self.prev_error
@@ -204,15 +227,27 @@ class LaneNode(Node):
         combined = cv2.morphologyEx(combined, cv2.MORPH_OPEN,  kernel)
         combined = cv2.morphologyEx(combined, cv2.MORPH_CLOSE, kernel)
 
+        # The bright, low-saturation sky also passes the white threshold.
+        # Retain candidates only below a nearby dark-road observation.  The
+        # horizontal dilation bridges thick white paint so its own columns are
+        # still supported by the surrounding road surface.
+        dark_road = np.where(gray < 100, 255, 0).astype(np.uint8)
+        dark_road = cv2.dilate(
+            dark_road, cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3)))
+        road_support = np.maximum.accumulate(dark_road > 0, axis=0)
+        combined = cv2.bitwise_and(
+            combined, road_support.astype(np.uint8) * 255)
+
         return combined
 
     # ---------------------------------------------------------------------- #
     def _centroid_x(self, mask):
-        """Return x-centroid of white pixels in mask, or None if too few."""
+        """Return (x centroid, normalised vertical depth), or None."""
         pts = cv2.findNonZero(mask)
         if pts is None or len(pts) < self.min_white:
             return None
-        return float(np.mean(pts[:, 0, 0]))
+        return (float(np.mean(pts[:, 0, 0])),
+                float(np.mean(pts[:, 0, 1]) / max(1, mask.shape[0])))
 
 
 # ============================================================================ #
